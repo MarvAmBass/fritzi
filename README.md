@@ -1,5 +1,6 @@
 # fritzi
 ___Fritzi is a small Python Library (pure, single file, standard library only) to control FRITZ!Box Routers___
+
 _It's tested to work with FRITZ!OS: 06.51_
 
 I've tried to get as much informations possible about the API by watching network traffic via chrome.
