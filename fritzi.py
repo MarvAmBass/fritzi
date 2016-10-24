@@ -15,7 +15,7 @@ class Fritzi:
 
 
   def __init__(self, hostname):
-    self.connection = httplib.HTTPSConnection(hostname, timeout=5, context=ssl._create_unverified_context())
+    self.connection = httplib.HTTPSConnection(hostname, timeout=15, context=ssl._create_unverified_context())
     self.sid = Fritzi.INVALID_SESSION_ID
 
 
@@ -66,6 +66,8 @@ class Fritzi:
     secondResponse = self.connection.getresponse()
     dataWithFinalSID = secondResponse.read()
     self.sid = self.__extractSid(dataWithFinalSID);
+    if Fritzi.INVALID_SESSION_ID == self.sid:
+      raise ValueError("login failed - wrong username or password")
 
 
 
@@ -78,6 +80,9 @@ class Fritzi:
 
 
   def isSessionIdStillValid(self, sessionId):
+    if Fritzi.INVALID_SESSION_ID == sessionId:
+      return False
+
     self.connection.request("GET", "/login_sid.lua?0=0&sid="+sessionId)
     response = self.connection.getresponse()
     responseData = response.read()
@@ -105,17 +110,43 @@ class Fritzi:
   def getConnectedDevices(self, overview):
     return overview['data']['net']['devices']
 
-  def getWifiSettings(self, overview):
-    wlan24 = overview['data']['wlan24']['txt']
-    wlan5 = overview['data']['wlan5']['txt']
-    return {"wifi24": {"ssid": wlan24.split('GHz: ')[1], "active": (wlan24.split(',')[0] != "aus")}, "wifi5": {"ssid": wlan5.split('GHz: ')[1], "active": (wlan5.split(',')[0] != "aus") }}
-
 
 
   # special extractors
+  def getWifiSettings(self):
+    params = urllib.urlencode({'xhr': 1, 'sid': self.sid, 'no_sidrenew': '', 'lang':'de', 'page': 'wSet'})
+    self.connection.request("POST", "/data.lua", params, self.__getHeaders())
+    response = self.connection.getresponse().read()
+    #return response
+
+    wifiSSIDVisible = False
+    wifiSSIDActive24 = False
+    wifiSSID24 = ""
+    wifiSSIDActive5 = False
+    wifiSSID5 = ""
+
+    for line in response.split('\n'):
+
+      if 'id="uiView_HiddenSSID"' in line:
+        wifiSSIDVisible = ("checked" in line)
+      elif 'id="uiView_Active_24"' in line:
+        wifiSSIDActive24 = ("checked" in line)
+      elif 'id="uiView_SSID_24"' in line:
+        wifiSSID24 = self.__extractor('value=\"(.*?)\"', line)
+      elif 'id="uiView_Active_5"' in line:
+        wifiSSIDActive5 = ("checked" in line)
+      elif 'id="uiView_SSID_5"' in line:
+        wifiSSID5 = self.__extractor('value=\"(.*?)\"', line)
+
+    return {"wifi24": {"ssid": wifiSSID24, "active": wifiSSIDActive24}, "wifi5": {"ssid": wifiSSID5, "active": wifiSSIDActive5}, "ssidVisible": wifiSSIDVisible}
+
+
+
   def getGuestWifiSettings(self):
-    overview = self.getOverview()
-    wifiSettings = self.getWifiSettings(overview)
+    wifiSettings = self.getWifiSettings()
+    if 'ssidVisible' in wifiSettings:
+      del wifiSettings['ssidVisible']
+
     wifiActive = False
     for wifikey in wifiSettings:
       wifi = wifiSettings[wifikey]
@@ -191,7 +222,15 @@ class Fritzi:
     wifiParams = {'xhr': 1, 'sid': self.sid, 'print': '', 'validate':'apply', 'active': 'on'}
     dataParams = {'xhr': 1, 'sid': self.sid, 'no_sidrenew': '', 'lang':'de', 'apply': '', 'print': '', 'oldpage': '/wlan/wlan_settings.lua', 'active': 'on'}
 
+    additionalParams = {}
+
     if wifiSettings is not None:
+
+      if 'ssidVisible' in wifiSettings:
+        if wifiSettings['ssidVisible']:
+          additionalParams.update({'hidden_ssid': 'on'})
+        del wifiSettings['ssidVisible']
+
       for wifikey in wifiSettings:
         wifi = wifiSettings[wifikey]
         if wifi['active']:
@@ -202,7 +241,7 @@ class Fritzi:
           except:
             pass
 
-          additionalParams = {'SSID': wifi['ssid'], 'active_'+wifiGhz: 'on', 'SSID_'+wifiGhz: wifi['ssid'], 'hidden_ssid': 'on'}
+          additionalParams.update({'SSID': wifi['ssid'], 'active_'+wifiGhz: 'on', 'SSID_'+wifiGhz: wifi['ssid']})
 
           wifiParams.update(additionalParams)
           dataParams.update(additionalParams)
@@ -213,7 +252,7 @@ class Fritzi:
     self.connection.request("POST", "/data.lua", urllib.urlencode(dataParams), self.__getHeaders())
     self.connection.getresponse().read()
 
-    return self.getWifiSettings(self.getOverview())
+    return self.getWifiSettings()
 
 
 
@@ -233,7 +272,6 @@ class Fritzi:
 
     if guestWifiSettings is not None:
       if guestWifiSettings['active']:
-        print("activate guest-wifi:")
         additionalParams = {'activate_guest_access': 'on', 'guest_ssid': guestWifiSettings['ssid'], 'sec_mode': guestWifiSettings['secMode'], 'wpa_key': guestWifiSettings['key']}
         wifiParams.update(additionalParams)
         dataParams.update(additionalParams)
@@ -311,7 +349,7 @@ if __name__ == '__main__':
   print(str(fritzi.getConnectedDevices(overview)))
   print("")
 
-  wifiSettings = fritzi.getWifiSettings(overview)
+  wifiSettings = fritzi.getWifiSettings()
   guestWifiSettings = fritzi.getGuestWifiSettings()
 
   print("")

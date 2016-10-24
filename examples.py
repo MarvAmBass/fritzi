@@ -17,7 +17,7 @@ print("")
 overview = fritzi.getOverview()
 
 # getting wifi and guestwifi settings
-wifiSettings = fritzi.getWifiSettings(overview)
+wifiSettings = fritzi.getWifiSettings()
 guestWifiSettings = fritzi.getGuestWifiSettings()
 
 # enable first wifi (2,4GHz or 5GHz whatever comes first) (won't do anything if this is already enabled)
