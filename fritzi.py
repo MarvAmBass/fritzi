@@ -15,11 +15,17 @@ class Fritzi:
 
 
   def __init__(self, hostname):
-    self.connection = httplib.HTTPSConnection(hostname, timeout=15, context=ssl._create_unverified_context())
+    self.hostname = hostname
     self.sid = Fritzi.INVALID_SESSION_ID
+    self.connect()
+
+    
+    
+  def connect(self):
+    self.connection = httplib.HTTPSConnection(self.hostname, timeout=15, context=ssl._create_unverified_context())
 
 
-
+    
   def __extractor(self, extractor, data):
     extractor = re.search(extractor, data)
     if extractor:
